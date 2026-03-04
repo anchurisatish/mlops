@@ -1,0 +1,17 @@
+# MLflow Model Registry Configuration
+model_name: "anc_site_selection_model"
+description: "Clinical trial site selection model using Random Forest"
+
+# Model metadata
+tags:
+  project: "anc"
+  team: "mlops"
+  use_case: "site_selection"
+  framework: "sklearn"
+
+# Permissions (for Unity Catalog)
+permissions:
+  - principal: "users"
+    permission: "CAN_READ"
+  - principal: "anchurisatish@gmail.com"
+    permission: "CAN_MANAGE"
