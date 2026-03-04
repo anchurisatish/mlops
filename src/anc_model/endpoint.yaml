@@ -1,0 +1,23 @@
+# Model Serving Endpoint Configuration
+name: "anc-site-predictor"
+description: "Real-time predictions for clinical trial site selection"
+
+config:
+  served_models:
+    - model_name: "anc_site_selection_model"
+      model_version: "1"
+      workload_size: "Small"
+      scale_to_zero_enabled: true
+
+  # Traffic routing (for A/B testing later)
+  traffic_config:
+    routes:
+      - served_model_name: "anc_site_selection_model-1"
+        traffic_percentage: 100
+
+# Permissions
+permissions:
+  - principal: "anchurisatish@gmail.com"
+    permission: "CAN_QUERY"
+  - principal: "anchurisatish@gmail.com"
+    permission: "CAN_MANAGE"
