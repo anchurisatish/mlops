@@ -1,0 +1,33 @@
+# Databricks Job Configuration for anc Model Training
+name: "anc_site_selection_training"
+description: "Automated training job for anc site selection model"
+
+tasks:
+  - task_key: "train_model"
+    description: "Train Random Forest model for site selection"
+
+    notebook_task:
+      # Path to your training notebook in Databricks
+      notebook_path: "/Users/anchurisatish@gmail.com/anc_training_notebook"
+      base_parameters: {}
+
+    # Compute configuration
+    new_cluster:
+      spark_version: "13.3.x-scala2.12"
+      node_type_id: "i3.xlarge"
+      num_workers: 0  # Single node for practice
+      spark_conf:
+        "spark.databricks.cluster.profile": "singleNode"
+        "spark.master": "local[*]"
+
+    # Timeout (1 hour)
+    timeout_seconds: 3600
+
+    # Retry on failure
+    max_retries: 1
+    min_retry_interval_millis: 60000
+
+# Email notifications (optional)
+email_notifications:
+  on_success: []
+  on_failure: []
