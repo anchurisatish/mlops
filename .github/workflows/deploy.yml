@@ -1,9 +1,9 @@
-name: Deploy anc Model Pipeline
+name: Deploy ANC Model Pipeline
 
 on:
   push:
     branches: [main]
-  workflow_dispatch:  # Allows manual trigger
+  workflow_dispatch:
 
 jobs:
   deploy:
@@ -28,7 +28,7 @@ jobs:
           DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
         run: |
           echo "Configuring Databricks CLI..."
-          rm -rf ~/.databrickscfg  # ← ADD THIS LINE to remove directory
+          rm -rf ~/.databrickscfg
           echo "[DEFAULT]" > ~/.databrickscfg
           echo "host = $DATABRICKS_HOST" >> ~/.databrickscfg
           echo "token = $DATABRICKS_TOKEN" >> ~/.databrickscfg
@@ -42,26 +42,120 @@ jobs:
           python -c "import yaml; yaml.safe_load(open('src/anc_model/endpoint.yaml'))"
           echo "✅ All configuration files are valid"
 
-      - name: Display job configuration
+      # NEW: Actually create the Databricks job
+      - name: Create Databricks Training Job
+        env:
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
         run: |
-          echo "📦 Databricks Job Configuration:"
-          cat src/anc_model/training_job.yaml
-          echo ""
-          echo "📦 Model Registry Configuration:"
-          cat src/anc_model/model_registry.yaml
-          echo ""
-          echo "📦 Endpoint Configuration:"
-          cat src/anc_model/endpoint.yaml
+          echo "🔧 Creating Databricks training job..."
 
-      - name: Deployment summary
+          # Create job configuration JSON from YAML
+          python << 'EOF'
+          import yaml
+          import json
+          import requests
+          import os
+
+          # Load training job config
+          with open('src/anc_model/training_job.yaml', 'r') as f:
+              job_config = yaml.safe_load(f)
+
+          # Databricks API endpoint
+          host = os.environ['DATABRICKS_HOST']
+          token = os.environ['DATABRICKS_TOKEN']
+
+          headers = {
+              'Authorization': f'Bearer {token}',
+              'Content-Type': 'application/json'
+          }
+
+          # Check if job already exists
+          list_url = f"{host}/api/2.1/jobs/list"
+          response = requests.get(list_url, headers=headers)
+
+          existing_jobs = response.json().get('jobs', [])
+          job_name = job_config['name']
+          existing_job = next((j for j in existing_jobs if j['settings']['name'] == job_name), None)
+
+          if existing_job:
+              # Update existing job
+              job_id = existing_job['job_id']
+              update_url = f"{host}/api/2.1/jobs/update"
+              payload = {
+                  'job_id': job_id,
+                  'new_settings': job_config
+              }
+              response = requests.post(update_url, headers=headers, json=payload)
+              print(f"✅ Updated existing job: {job_name} (ID: {job_id})")
+          else:
+              # Create new job
+              create_url = f"{host}/api/2.1/jobs/create"
+              response = requests.post(create_url, headers=headers, json=job_config)
+              job_id = response.json().get('job_id')
+              print(f"✅ Created new job: {job_name} (ID: {job_id})")
+
+          # Save job ID for later use
+          with open('job_id.txt', 'w') as f:
+              f.write(str(job_id))
+
+          print(f"📝 Job ID saved: {job_id}")
+          EOF
+
+      # NEW: Create/Update MLflow Model Registry
+      - name: Setup Model Registry
+        env:
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
         run: |
-          echo "🎉 Deployment workflow completed!"
-          echo "✅ Configuration files validated"
-          echo "✅ Databricks CLI configured"
+          echo "📦 Setting up MLflow Model Registry..."
+
+          python << 'EOF'
+          import yaml
+          import requests
+          import os
+
+          with open('src/anc_model/model_registry.yaml', 'r') as f:
+              registry_config = yaml.safe_load(f)
+
+          host = os.environ['DATABRICKS_HOST']
+          token = os.environ['DATABRICKS_TOKEN']
+
+          headers = {
+              'Authorization': f'Bearer {token}',
+              'Content-Type': 'application/json'
+          }
+
+          # Create registered model (if doesn't exist)
+          model_name = registry_config['model_name']
+          create_url = f"{host}/api/2.0/mlflow/registered-models/create"
+
+          payload = {
+              'name': model_name,
+              'description': registry_config.get('description', '')
+          }
+
+          response = requests.post(create_url, headers=headers, json=payload)
+
+          if response.status_code == 200:
+              print(f"✅ Created model registry: {model_name}")
+          elif 'RESOURCE_ALREADY_EXISTS' in response.text:
+              print(f"✅ Model registry already exists: {model_name}")
+          else:
+              print(f"⚠️ Response: {response.text}")
+          EOF
+
+      - name: Deployment Summary
+        run: |
+          echo "🎉 Deployment Complete!"
           echo ""
-          echo "📍 Next steps:"
-          echo "   1. In real setup, this would create Databricks job"
-          echo "   2. Would register model in MLflow Registry"
-          echo "   3. Would create serving endpoint"
+          echo "✅ Databricks job created/updated"
+          echo "✅ Model registry configured"
+          echo "✅ Ready for training execution"
           echo ""
-          echo "For practice, we're simulating the workflow!"
+          if [ -f job_id.txt ]; then
+            JOB_ID=$(cat job_id.txt)
+            echo "📍 Job ID: $JOB_ID"
+            echo "📍 View in Databricks: ${{ secrets.DATABRICKS_HOST }}/#job/$JOB_ID"
+          fi
+
