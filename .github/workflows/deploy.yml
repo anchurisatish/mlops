@@ -28,7 +28,7 @@ jobs:
           DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
         run: |
           echo "Configuring Databricks CLI..."
-          mkdir -p ~/.databrickscfg
+          rm -rf ~/.databrickscfg  # ← ADD THIS LINE to remove directory
           echo "[DEFAULT]" > ~/.databrickscfg
           echo "host = $DATABRICKS_HOST" >> ~/.databrickscfg
           echo "token = $DATABRICKS_TOKEN" >> ~/.databrickscfg
